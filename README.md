@@ -81,9 +81,40 @@ evening are filed by the time anyone looks.
 - it catches up a missed start, restarts the watcher after a crash, and is never stopped for running too long;
 - it runs `teams-channel-sync-background.exe` directly, so there's no window, and stopping the task stops the watcher.
 
+## Committing to git: `[git]`
+
+If the notes folder is in a git repository, `[git]` commits what each sync wrote:
+
+```toml
+[git]
+repo = "."                                   # the repository (relative to this file)
+push = true                                  # optional (default false): push after each commit
+trailers = ["Co-Authored-By: Name <name@example.com>"]   # optional: the message's last lines
+```
+
+It commits after any sync that wrote a file, as the hook runs (always in `watch`, and with `--hook` for `sync`), before
+the hook. **Only the files written are committed**, and of those only the ones git sees as changed, so nothing else
+changed or staged in the repository is swept up. The message names each file by its folder and name, in git status's
+order:
+
+```
+Ingest exco-notes 2026-10-16, exco-notes 2026-10-23
+
+Filed automatically by teams-channel-sync (tools/teams-channel-sync.toml).
+
+Co-Authored-By: Name <name@example.com>
+```
+
+**A commit that fails** (a hook in the repository refusing it, say) is logged and notified ("Filed, not committed"); the
+files stay where they were written. **A push that fails** is only logged; the commit stays. `commit = false` keeps the
+section but commits nothing; with no section, nothing is committed. It's
+[background-tools-lib](https://github.com/gareth-jones-zen/background-tools-lib)'s `RepoCommit`: git is run from the
+PATH, every path is literal, another git holding the index is waited for briefly, and the log has counts and the commit
+id, never contents.
+
 ## The after-run hook
 
-To do something with what's filed, such as commit it to git or forward it, set `after_run`:
+To do anything else with what's filed, such as forward it, set `after_run`:
 
 ```toml
 after_run = ["powershell", "-NoProfile", "-File", "commit.ps1"]   # any command, and its arguments

@@ -20,6 +20,10 @@ public sealed record Source(string Name, string Team, string Channel, Regex Titl
 ///     state_file = "..."                      # optional
 ///     log_file = "..."                        # optional: where watch logs
 ///     after_run = ["python", "commit.py"]     # optional: run after a sync that wrote files (JSON on stdin)
+///     [git]                                   # optional: commit what a sync wrote (see the README)
+///     repo = "."
+///     push = true
+///     trailers = ["Co-Authored-By: Name &lt;name@example.com&gt;"]
 ///     watch_every_minutes = 15                # optional: how often watch syncs
 ///
 ///     [[source]]
@@ -63,6 +67,9 @@ public sealed class Config
     public required string StateFile { get; init; }
     public required string LogFile { get; init; }
     public List<string> AfterRun { get; init; } = [];
+
+    /// <summary>[git], or null: nothing committed. Commits what a sync wrote (with --hook, and in watch).</summary>
+    public RepoCommit.GitSettings? Git { get; init; }
     public long WatchEveryMinutes { get; init; } = 15;
 
     public static string? Environment(string name) =>
@@ -120,9 +127,25 @@ public sealed class Config
         string? Text(string key) => raw.TryGetValue(key, out var value) ? Str(value, key) : null;
         string? OptionalPath(string key) => Text(key) is { Length: > 0 } value ? PathSetting(value, folder, env) : null;
 
+        RepoCommit.GitSettings? git = null;
+        if (raw.TryGetValue("git", out var gitSection))
+        {
+            try
+            {
+                git = RepoCommit.GitSettings.Read(gitSection, full, value => PathSetting(value, folder, env));
+            }
+            catch (FormatException error)
+            {
+                throw new PyValueError(error.Message);
+            }
+            if (!Directory.Exists(git.Repo))
+                throw new PyValueError($"repo under [git] in {full} isn't a folder: {git.Repo}");
+        }
+
         var config = new Config
         {
             Path = full,
+            Git = git,
             LoginHint = Text("login_hint"),
             Tenant = Text("tenant") ?? "organizations",
             MsalCache = OptionalPath("msal_cache"),

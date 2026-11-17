@@ -1,14 +1,16 @@
 using System.ComponentModel;
 using System.Text;
 using PyCompat;
+using RepoCommit;
 using WinBackground;
 
 namespace TeamsChannelSync;
 
-/// <summary>One locked sync, then the after-run hook if it wrote anything.
+/// <summary>One locked sync, then, if it wrote anything, [git]'s commit and the after-run hook.
 ///
-/// The hook is how a repo commits what was filed: the tool knows nothing about git. It gets a JSON report on
-/// stdin, the same shape doc-filer gives its hook, so one script can serve both:
+/// [git] commits exactly the files written (those git sees as changed), as "Ingest {folder} {name}, ...", and
+/// notifies "Filed, not committed" if it can't. The hook is for anything else a repo wants done. It gets a JSON
+/// report on stdin, the same shape doc-filer gives its hook, so one script can serve both:
 ///
 ///     {"config": "...", "written": ["C:\\...\\2026-10-23.md"], "failed": [], "unmatched": [], "summary": "1 written"}
 ///
@@ -68,10 +70,57 @@ public static class Run
         }
     }
 
+    /// <summary>"exco-notes 2026-10-23": a file's folder and its name without the extension, as a commit names it.</summary>
+    public static string Named(string repoPath)
+    {
+        var parts = repoPath.Split('/');
+        var name = parts[^1];
+        var dot = name.LastIndexOf('.');
+        return $"{(parts.Length > 1 ? parts[^2] : "")} {(dot > 0 && dot < name.Length - 1 ? name[..dot] : name)}";
+    }
+
+    /// <summary>[git]: commit what the sync wrote, only the files git sees as changed, in git status's order:
+    /// "Ingest exco-notes 2026-10-16, exco-notes 2026-10-23", then "Filed automatically by teams-channel-sync
+    /// ({settings})." and the trailers. If the commit fails, a notification ("Filed, not committed"); a push that
+    /// fails is only logged. Null when there's no [git] (or commit = false).</summary>
+    public static CommitResult? Commit(Config config, Report report, Action<string> log, Action<string, IReadOnlyList<string>> notify)
+    {
+        if (config.Git is not { Commit: true } git)
+            return null;
+        var committer = git.Open(log);
+        var names = "";
+        void Tell() => notify("Filed, not committed", [PyStr.Head(names, 300), $"See {System.IO.Path.GetFileName(config.LogFile)}."]);
+        try
+        {
+            var paths = committer.Changed(report.Written.Where(File.Exists));
+            if (paths.Count == 0)
+            {
+                log("git: nothing to commit");
+                return CommitResult.Nothing;
+            }
+            names = string.Join(", ", paths.Select(Named));
+            var settings = committer.RepoPath(config.Path) ?? System.IO.Path.GetFileName(config.Path);
+            var result = committer.Commit(Committer.Message($"Ingest {names}", $"Filed automatically by teams-channel-sync ({settings})."),
+                paths, trailers: git.Trailers, push: git.Push);
+            if (result.Error is not null)
+                Tell();
+            return result;
+        }
+        catch (Exception error) when (error is GitException or InvalidOperationException or Win32Exception or TimeoutException or IOException)
+        {
+            log($"git: commit failed: {error.Message}");
+            if (names.Length == 0)
+                names = string.Join(", ", report.Written.Select(System.IO.Path.GetFileNameWithoutExtension));
+            Tell();
+            return CommitResult.Failed(error.Message);
+        }
+    }
+
     /// <summary>run(): the sync under the run lock (TimeoutException if another doesn't finish within ten minutes),
-    /// then the hook if wanted, not a dry run, something was written and after_run is set.</summary>
+    /// then, if wanted, not a dry run and something was written, [git]'s commit and the hook (if after_run is set).</summary>
     public static Report Once(Config config, IGraph graph, bool dryRun = false, bool adopt = false, bool hook = false,
-        string? only = null, Action<string>? log = null, Func<IReadOnlyList<string>, string, string, TimeSpan, Completed>? runner = null)
+        string? only = null, Action<string>? log = null, Func<IReadOnlyList<string>, string, string, TimeSpan, Completed>? runner = null,
+        Action<string, IReadOnlyList<string>>? notify = null)
     {
         log ??= _ => { };
         Report report;
@@ -81,8 +130,12 @@ public static class Run
                 throw new TimeoutException($"Another sync for {config.Path} didn't finish within {LockTimeoutSeconds / 60:0} minutes.");
             report = Notes.Sync(config, graph, dryRun, adopt, only, log);
         }
-        if (hook && !dryRun && report.Written.Count > 0 && config.AfterRun.Count > 0)
-            AfterRun(config, report, log, runner);
+        if (hook && !dryRun && report.Written.Count > 0)
+        {
+            Commit(config, report, log, notify ?? Toast.Notify);
+            if (config.AfterRun.Count > 0)
+                AfterRun(config, report, log, runner);
+        }
         return report;
     }
 }

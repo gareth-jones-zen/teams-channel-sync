@@ -78,7 +78,7 @@ public static class Watch
                         graph = host.Graph(config);   // one client per settings, so its token is reused between syncs
                         graphFor = config;
                     }
-                    var report = TeamsChannelSync.Run.Once(config, graph!, hook: true, log: log, runner: host.HookRunner);
+                    var report = TeamsChannelSync.Run.Once(config, graph!, hook: true, log: log, runner: host.HookRunner, notify: host.Notify);
                     if (report.Written.Count > 0 || report.Untracked.Count > 0)
                         log(report.Summary());
                     if (alerted is not null)
