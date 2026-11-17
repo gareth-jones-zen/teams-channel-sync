@@ -1,0 +1,86 @@
+[
+ {
+  "name": "written",
+  "committed": {
+   "reports/exco-notes/2026-11-06.md": "- Consumer\n"
+  },
+  "written": {
+   "reports/exco-notes/2026-11-06.md": "- Consumer\n  - edited\n",
+   "reports/exco-notes/2026-11-13.md": "- Consumer\n"
+  },
+  "report": {
+   "config": "<repo>/tools/teams-channel-sync.toml",
+   "written": [
+    "<repo>/reports/exco-notes/2026-11-13.md",
+    "<repo>/reports/exco-notes/2026-11-06.md"
+   ],
+   "failed": [],
+   "unmatched": [],
+   "summary": "2 written"
+  },
+  "commits": [
+   {
+    "message": "Ingest exco-notes 2026-11-06, exco-notes 2026-11-13\n\nFiled automatically by doc-filer (tools/doc_filer_hook.py).\n\nCo-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>",
+    "files": [
+     "M\treports/exco-notes/2026-11-06.md",
+     "A\treports/exco-notes/2026-11-13.md"
+    ]
+   }
+  ],
+  "status": [],
+  "notes": [],
+  "items": []
+ },
+ {
+  "name": "unchanged",
+  "committed": {
+   "reports/exco-notes/2026-11-06.md": "- Consumer\n"
+  },
+  "written": {
+   "reports/exco-notes/2026-11-06.md": "- Consumer\n"
+  },
+  "report": {
+   "config": "<repo>/tools/teams-channel-sync.toml",
+   "written": [
+    "<repo>/reports/exco-notes/2026-11-06.md"
+   ],
+   "failed": [],
+   "unmatched": [],
+   "summary": "1 written"
+  },
+  "commits": [],
+  "status": [],
+  "notes": [],
+  "items": []
+ },
+ {
+  "name": "failing-hook",
+  "failing_hook": true,
+  "written": {
+   "reports/exco-notes/2026-11-13.md": "- Consumer\n"
+  },
+  "report": {
+   "config": "<repo>/tools/teams-channel-sync.toml",
+   "written": [
+    "<repo>/reports/exco-notes/2026-11-13.md"
+   ],
+   "failed": [],
+   "unmatched": [],
+   "summary": "1 written"
+  },
+  "commits": [],
+  "status": [
+   "A  reports/exco-notes/2026-11-13.md"
+  ],
+  "notes": [
+   [
+    "Filed, not committed",
+    [
+     "exco-notes 2026-11-13",
+     "See doc-filer.log."
+    ]
+   ]
+  ],
+  "items": []
+ }
+]
