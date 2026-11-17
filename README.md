@@ -21,6 +21,8 @@ Windows (x64) only; nothing else is needed.
 
 It holds two programs: `teams-channel-sync.exe`, for a console, and `teams-channel-sync-background.exe`, the same program with no window, which the logon task runs.
 
+**To upgrade while the watcher runs:** rename `teams-channel-sync.exe` and `teams-channel-sync-background.exe` to `.old` (Windows lets you rename a program that's running, but not overwrite it), unzip the new release into the same folder, then run `teams-channel-sync autostart restart`. That stops the watcher, waits for it to exit and starts the new version, keeping the task as it was. Delete the `.old` files afterwards. If the old watcher hasn't exited after 30 seconds, nothing is started and it carries on as it was.
+
 ## Getting started
 
 ```

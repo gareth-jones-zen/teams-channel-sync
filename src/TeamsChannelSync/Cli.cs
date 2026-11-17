@@ -46,7 +46,7 @@ public static class Cli
             teams-channel-sync check              compare the recent posts with the files, line by line
             teams-channel-sync adopt              take on files that were copied in by hand, as they stand
             teams-channel-sync watch              stay running, and sync every watch_every_minutes
-            teams-channel-sync autostart on       run the watcher at every logon, and start it now (off, status)
+            teams-channel-sync autostart on       run the watcher at every logon, and start it now (off, restart, status)
         """;
 
     private static readonly string[] Commands = ["config", "sign-in", "channels", "ids", "sync", "check", "adopt", "watch", "autostart"];
@@ -152,6 +152,20 @@ public static class Cli
             }
             else if (args.Action == "off")
                 Print(host.Out, task.Disable() ? "Autostart is off." : "Autostart was already off.");
+            else if (args.Action == "restart")
+            {
+                try
+                {
+                    Print(host.Out, task.Restart()
+                        ? $"Restarted '{Autostart.TaskName}': the watcher is running the installed version."
+                        : "Autostart is off, so there's nothing to restart. `teams-channel-sync autostart on` turns it on.");
+                }
+                catch (InvalidOperationException error)
+                {
+                    Print(host.Err, error.Message);
+                    return 1;
+                }
+            }
             else
             {
                 var info = task.Status();
@@ -274,8 +288,8 @@ public static class Cli
         {
             if (positional is null)
                 throw new UsageError("the following arguments are required: action");
-            if (positional is not ("on" or "off" or "status"))
-                throw new UsageError($"argument action: invalid choice: '{positional}' (choose from on, off, status)");
+            if (positional is not ("on" or "off" or "restart" or "status"))
+                throw new UsageError($"argument action: invalid choice: '{positional}' (choose from on, off, restart, status)");
         }
         if (unrecognised.Count > 0)
             throw new UsageError($"unrecognized arguments: {string.Join(' ', unrecognised)}");
@@ -288,7 +302,7 @@ public static class Cli
         "check" => " [--source SOURCE]",
         "adopt" => " [--source SOURCE] [--json]",
         "ids" => " link",
-        "autostart" => " {on,off,status}",
+        "autostart" => " {on,off,restart,status}",
         _ => "",
     };
 
