@@ -38,6 +38,7 @@ teams-channel-sync ids "<link>" # a channel's team and channel ids, from Teams' 
 Then add a `[[source]]` to the settings file:
 
 ```toml
+base = "base-config.toml"   # optional: settings shared with other tools
 login_hint = "you@example.com"
 
 [[source]]
@@ -59,6 +60,21 @@ teams-channel-sync adopt            # take on hand-copied files as they stand
 ```
 
 `sync --json` prints what was written.
+
+## Sharing settings with other tools: `base`
+
+Several tools on the shared library can keep common settings in one file, named at the top of each tool's settings
+(`base = "base-config.toml"`, relative to the settings file).
+
+- **The base's `[paths]` are variables** for this tool's paths (`msal_cache`, `state_file`, `log_file`, a source's
+  `folder`, `[git]`'s `repo`), looked up before the environment: with `EA_LOCAL = "%LOCALAPPDATA%/claude-ea"` there,
+  `log_file = "%EA_LOCAL%/teams-channel-sync.log"` works here.
+- **Its other settings that this tool knows and doesn't set itself are used**, such as `login_hint`, `tenant` and
+  `msal_cache`; settings it doesn't know are left out, so one base serves tools that use different parts of it.
+- **A table such as `[git]` applies only if this file has that section too**, even empty (`[git]` on its own line):
+  the base's keys fill it in, this file's own keys winning.
+- A base that's missing or can't be read is refused like any other settings problem. The loader is
+  [background-tools-lib](https://github.com/gareth-jones-zen/background-tools-lib)'s `PyCompat.BaseSettings`.
 
 ## Keeping it current: `watch` and `autostart`
 

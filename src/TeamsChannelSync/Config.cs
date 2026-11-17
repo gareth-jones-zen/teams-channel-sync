@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using PyCompat;
-using Tomlyn;
 using Tomlyn.Model;
 
 namespace TeamsChannelSync;
@@ -14,6 +13,7 @@ public sealed record Source(string Name, string Team, string Channel, Regex Titl
 
 /// <summary>The settings file: who signs in, and which channels become which folders of notes.
 ///
+///     base = "base-config.toml"               # optional: settings shared with other tools (see the README)
 ///     login_hint = "you@example.com"          # optional
 ///     tenant = "organizations"                # optional: a tenant id pins sign-in to one organisation
 ///     msal_cache = "..."                      # optional: share another tool's sign-in
@@ -41,10 +41,16 @@ public sealed record Source(string Name, string Team, string Channel, Regex Titl
 public sealed class Config
 {
     public static readonly string[] Scopes = ["ChannelMessage.Read.All"];
+
+    /// <summary>Every top-level setting (tables included). A base file's settings are used only when they're one of
+    /// these: see the README, "Sharing settings with other tools".</summary>
+    public static readonly string[] KnownKeys =
+        ["login_hint", "tenant", "msal_cache", "state_file", "log_file", "after_run", "git", "watch_every_minutes", "source"];
     public const string EnvConfig = "TEAMS_CHANNEL_SYNC_CONFIG";
 
     public const string Template = """
         # teams-channel-sync settings. See the README.
+        # base = "base-config.toml"   # optional: settings shared with other tools
         # login_hint = "you@example.com"
 
         # One [[source]] per channel. `teams-channel-sync channels` lists your teams and channels with their ids.
@@ -111,19 +117,27 @@ public sealed class Config
         if (!File.Exists(full))
             throw new FileNotFoundException($"No settings file at {full}. Run `teams-channel-sync config` to create one.");
         TomlTable raw;
+        var local = LocalFolder(env);
         try
         {
             var text = PyText.ReadText(full);
             if (text.StartsWith('\ufeff'))
                 throw new PyValueError("Invalid statement (at line 1, column 1)");   // tomllib refuses a byte order mark
-            raw = TomlSerializer.Deserialize(text, TomlContext.Default.TomlTable) ?? [];
+            // With the base file it names (base = "base-config.toml"), if any: from here on, paths expand with the
+            // base's [paths] as well as the environment.
+            var read = BaseSettings.Read(text, full, env, KnownKeys);
+            raw = read.Raw;
+            env = read.Env;
+        }
+        catch (FormatException error)
+        {
+            throw new PyValueError(error.Message);   // the base file: its message names it
         }
         catch (Exception error) when (error is not (IOException or UnauthorizedAccessException or PyValueError))
         {
             throw new PyValueError($"{full}: {error.Message}");
         }
         var folder = System.IO.Path.GetDirectoryName(full)!;
-        var local = LocalFolder(env);
         string? Text(string key) => raw.TryGetValue(key, out var value) ? Str(value, key) : null;
         string? OptionalPath(string key) => Text(key) is { Length: > 0 } value ? PathSetting(value, folder, env) : null;
 
@@ -240,6 +254,3 @@ public sealed class Config
         _ => throw new PyValueError($"{key} must be a list, as [\"python\", \"commit.py\"]."),
     };
 }
-
-[Tomlyn.Serialization.TomlSerializable(typeof(TomlTable))]
-internal partial class TomlContext : Tomlyn.Serialization.TomlSerializerContext;
