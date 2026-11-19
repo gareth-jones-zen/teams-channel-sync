@@ -82,12 +82,15 @@ public static class Run
     /// <summary>[git]: commit what the sync wrote, only the files git sees as changed, in git status's order:
     /// "Ingest exco-notes 2026-10-16, exco-notes 2026-10-23", then "Filed automatically by teams-channel-sync
     /// ({settings})." and the trailers. If the commit fails, a notification ("Filed, not committed"); a push that
-    /// fails is only logged. Null when there's no [git] (or commit = false).</summary>
+    /// fails is only logged. Null when there's no [git] (or commit = false). git not set up (not installed, not a
+    /// repository, or a folder inside one) is Skipped: one log line a process, no notification.</summary>
     public static CommitResult? Commit(Config config, Report report, Action<string> log, Action<string, IReadOnlyList<string>> notify)
     {
         if (config.Git is not { Commit: true } git)
             return null;
         var committer = git.Open(log);
+        if (committer.Skipped is { } why)
+            return CommitResult.Skip(why);   // the notes are filed; the library has said why, once
         var names = "";
         void Tell() => notify("Filed, not committed", [PyStr.Head(names, 300), $"See {System.IO.Path.GetFileName(config.LogFile)}."]);
         try

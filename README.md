@@ -105,7 +105,7 @@ If the notes folder is in a git repository, `[git]` commits what each sync wrote
 
 ```toml
 [git]
-repo = "."                                   # the repository (relative to this file)
+repo = "."                                   # the repository's top (relative to this file)
 push = true                                  # optional (default false): push after each commit
 trailers = ["Co-Authored-By: Name <name@example.com>"]   # optional: the message's last lines
 ```
@@ -129,6 +129,8 @@ section but commits nothing; with no section, nothing is committed. It's
 [background-tools-lib](https://github.com/gareth-jones-zen/background-tools-lib)'s `RepoCommit`: git is run from the
 PATH, every path is literal, another git holding the index is waited for briefly, and the log has counts and the commit
 id, never contents.
+
+**git not set up is quiet, not a failure**: with `[git]` but no git installed, or a `repo` that isn't a git repository, or a folder *inside* one rather than its top (nothing is committed into a repository the folder only sits in), the notes are written as usual, one line says "git: not committing: ..." (once a process: once a logon for the watcher; after `git init`, `autostart restart` to start committing), and nothing is notified. **No upstream, no push**: with `push = true` and a branch with no upstream (no remote), the commit stays and no push is tried; one log line says so.
 
 ## The after-run hook
 

@@ -98,6 +98,33 @@ public sealed class GitTests : IDisposable
     }
 
     [Fact]
+    public void A_folder_that_isnt_a_repository_files_the_notes_and_notifies_nothing()
+    {
+        var folder = Path.Combine(root, "plain");
+        var config = Settings(Path.Combine(folder, "settings.toml"), RunTests.Settings("[git]\nrepo = \".\"\npush = true\n"));
+        for (var i = 0; i < 2; i++)   // a watcher's syncs: said once
+            Run.Once(config, new FakeGraph(_ => RunTests.Messages(($"ExCo Notes - 2026-10-1{i}", "2026-10-19T08:00:00Z", $"<ul><li>{i}</li></ul>"))),
+                hook: true, log: log.Add, notify: (t, l) => notes.Add((t, l)));
+        Assert.True(File.Exists(Path.Combine(folder, "notes", "2026-10-11.md")));
+        Assert.Empty(notes);
+        Assert.Single(log, l => l.StartsWith("git: not committing: ", StringComparison.Ordinal) && l.EndsWith(" isn't a git repository.", StringComparison.Ordinal));
+        Assert.False(Directory.Exists(Path.Combine(folder, ".git")));
+    }
+
+    [Fact]
+    public void A_folder_inside_another_repository_isnt_committed_into_it()
+    {
+        var outer = new GitRepo(Path.Combine(root, "outer"));
+        var inner = outer.File("assistant");
+        var config = Settings(Path.Combine(inner, "settings.toml"), RunTests.Settings("[git]\nrepo = \".\"\n"));
+        Run.Once(config, new FakeGraph(_ => RunTests.Messages(("ExCo Notes - 2026-10-16", "2026-10-19T08:00:00Z", "<ul><li>b</li></ul>"))),
+            hook: true, log: log.Add, notify: (t, l) => notes.Add((t, l)));
+        Assert.Empty(outer.Commits());
+        Assert.Empty(notes);
+        Assert.Contains(log, l => l.Contains("not its top; nothing is committed into it.", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Named_is_the_folder_and_the_stem() =>
         Assert.Equal(["exco-notes 2026-10-23", " top", "a b.c", "a .hidden"],
             [Run.Named("reports/exco-notes/2026-10-23.md"), Run.Named("top.md"), Run.Named("x/a/b.c.md"), Run.Named("a/.hidden")]);
