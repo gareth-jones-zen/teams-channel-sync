@@ -85,7 +85,7 @@ teams-channel-sync autostart off
 teams-channel-sync watch              # the same loop, in a console
 ```
 
-`watch` syncs every source every `watch_every_minutes` (default 15), so notes posted on a Friday
+`watch` syncs every source every 15 minutes (`[schedule]` below), so notes posted on a Friday
 evening are filed by the time anyone looks.
 
 - **It polls.** Graph can only push channel posts to a public web endpoint, so it asks. A sync with nothing new costs one Graph call per source.
@@ -98,6 +98,24 @@ evening are filed by the time anyone looks.
 - it runs as you, only while you're logged on, with no admin rights;
 - it catches up a missed start, restarts the watcher after a crash, and is never stopped for running too long;
 - it runs `teams-channel-sync-background.exe` directly, so there's no window, and stopping the task stops the watcher.
+
+`autostart status` also says when the task no longer matches the settings ("run `teams-channel-sync autostart on`").
+
+### `[schedule]`
+
+The scheduling settings every tool on background-tools-lib shares (its README, "[schedule]: the shared scheduling
+settings", has every key). For this watcher:
+
+```toml
+[schedule]
+every_minutes = 15        # how often watch syncs (the default)
+hours = "07:00-19:00"     # optional: sync only in this window (default all day)
+days = "Mon-Fri"          # optional: and only on these days (default every day)
+```
+
+A watcher always starts at logon, so `daily_at` and `after_unlock_minutes` don't apply. A change is picked up when
+the settings are re-read, with no restart. `watch_every_minutes`, the old name for `every_minutes`, is still read
+(with a line in the log); setting both is an error.
 
 ## Committing to git: `[git]`
 

@@ -146,7 +146,7 @@ public static class Cli
             {
                 var config = TeamsChannelSync.Config.Load(args.Config, host.Env);   // check the settings load before scheduling them
                 var (exe, taskArgs) = Autostart.Command(host.ProgramDir, config.Path);
-                var command = task.Enable(exe, taskArgs, Path.GetDirectoryName(config.Path));
+                var command = task.Enable(exe, taskArgs, Path.GetDirectoryName(config.Path), config.Schedule.ToTaskSchedule(TaskKind.Watcher));
                 Print(host.Out, $"Autostart is on: '{Autostart.TaskName}' runs at every logon, and has started now.\n  {command}\n"
                                 + $"  log: {config.LogFile}");
             }
@@ -176,6 +176,13 @@ public static class Cli
                     Print(host.Out, $"Autostart is on ('{Autostart.TaskName}').");
                     foreach (var key in new[] { "state", "last_run", "last_result", "command" })
                         Print(host.Out, $"  {key.Replace('_', ' '),-12} {info.GetValueOrDefault(key, "")}");
+                    // Whether the task still matches [schedule] (only when the settings load; status needs none).
+                    TeamsChannelSync.Config? settings = null;
+                    try { settings = TeamsChannelSync.Config.Load(args.Config, host.Env); }
+                    catch (Exception error) when (error is FileNotFoundException or PyValueError or IOException) { }
+                    if (settings is not null
+                        && ScheduleDrift.Advice(ScheduleDrift.Check(info, settings.Schedule.Fingerprint(TaskKind.Watcher)), "teams-channel-sync") is { } advice)
+                        Print(host.Out, $"  {advice}");
                 }
             }
             return 0;

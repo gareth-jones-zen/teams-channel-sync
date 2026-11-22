@@ -26,8 +26,13 @@ public class CliTests
             return State is not null;
         }
 
-        public string Enable(string exe, IReadOnlyList<string> args, string? workingDir, TaskSchedule schedule) =>
-            throw new NotSupportedException("the watcher is enabled with the logon schedule only");
+        public TaskSchedule? Schedule { get; private set; }
+
+        public string Enable(string exe, IReadOnlyList<string> args, string? workingDir, TaskSchedule schedule)
+        {
+            Schedule = schedule;
+            return Enable(exe, args, workingDir);
+        }
 
         public bool Stop() => false;
 
@@ -181,6 +186,8 @@ public class CliTests
         var exe = Path.Combine(programDir, Autostart.BackgroundExe);
         Assert.Equal($"enable {exe} --config {config.Path} watch in {temp.Path}", task.Calls.Single());
         Assert.Equal($"Autostart is on: 'teams-channel-sync watch' runs at every logon, and has started now.\r\n  {exe} --config {Shell.ListToCommandLine([config.Path])} watch\r\n  log: {config.LogFile}\r\n", output);
+        Assert.True(task.Schedule!.KeepRunning && task.Schedule.AtLogon && task.Schedule.Every is null);   // a watcher, as before
+        Assert.Equal("v1 watcher logon=yes", task.Schedule.Fingerprint);
 
         Assert.Equal("Autostart was already off.\r\n", Cli(["autostart", "off"], task: task).Out);
         Assert.Equal("Autostart is off.\r\n", Cli(["autostart", "status"], task: task).Out);
@@ -188,6 +195,25 @@ public class CliTests
         Assert.Equal("Autostart is on ('teams-channel-sync watch').\r\n  state        Running\r\n  last run     today\r\n  last result  0\r\n  command      x.exe\r\n",
             Cli(["autostart", "status"], task: task).Out);
         Assert.Equal("Autostart is off.\r\n", Cli(["autostart", "off"], task: task).Out);
+    }
+
+    /// <summary>autostart status says when the registered task no longer matches [schedule] (or can't tell).</summary>
+    [Fact]
+    public void Autostart_status_says_when_the_task_needs_registering_again()
+    {
+        using var temp = new Golden.TempFolder();
+        var config = RunTests.Setup(temp);
+        var task = new FakeTask();
+        string Status(string? description)
+        {
+            task.State = new Dictionary<string, string> { ["state"] = "Running", ["command"] = "x.exe", ["last_run"] = "today", ["last_result"] = "0" };
+            if (description is not null)
+                ((Dictionary<string, string>)task.State)["description"] = description;
+            return Cli(["--config", config.Path, "autostart", "status"], task: task).Out;
+        }
+        Assert.DoesNotContain("autostart on", Status("Files Teams channel posts. (schedule: v1 watcher logon=yes)"));
+        Assert.Contains("settings changed since this task was registered: run `teams-channel-sync autostart on`", Status("x (schedule: v1 job every=15 daily=- logon=yes unlock=0)"));
+        Assert.Contains("registered before its schedule was recorded: run `teams-channel-sync autostart on`", Status(null));
     }
 
     /// <summary>check's verdicts and diff, against Python's check() over the same files and posts.</summary>

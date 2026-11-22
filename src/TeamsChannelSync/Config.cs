@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using PyCompat;
 using Tomlyn.Model;
+using WinBackground;
 
 namespace TeamsChannelSync;
 
@@ -24,7 +25,12 @@ public sealed record Source(string Name, string Team, string Channel, Regex Titl
 ///     repo = "."
 ///     push = true
 ///     trailers = ["Co-Authored-By: Name &lt;name@example.com&gt;"]
-///     watch_every_minutes = 15                # optional: how often watch syncs
+///
+///     [schedule]                              # optional: the shared scheduling settings (background-tools-lib)
+///     every_minutes = 15                      # how often watch syncs (default 15)
+///     hours = "07:00-19:00"                   # optional: sync only in this window (default all day)
+///     days = "Mon-Fri"                        # optional: and on these days (default every day)
+///     # watch_every_minutes is the old name for every_minutes: still read, with a line in the log
 ///
 ///     [[source]]
 ///     name = "exco"
@@ -45,7 +51,7 @@ public sealed class Config
     /// <summary>Every top-level setting (tables included). A base file's settings are used only when they're one of
     /// these: see the README, "Sharing settings with other tools".</summary>
     public static readonly string[] KnownKeys =
-        ["login_hint", "tenant", "msal_cache", "state_file", "log_file", "after_run", "git", "watch_every_minutes", "source"];
+        ["login_hint", "tenant", "msal_cache", "state_file", "log_file", "after_run", "git", "watch_every_minutes", "schedule", "source"];
     public const string EnvConfig = "TEAMS_CHANNEL_SYNC_CONFIG";
 
     public const string Template = """
@@ -77,6 +83,15 @@ public sealed class Config
     /// <summary>[git], or null: nothing committed. Commits what a sync wrote (with --hook, and in watch).</summary>
     public RepoCommit.GitSettings? Git { get; init; }
     public long WatchEveryMinutes { get; init; } = 15;
+
+    /// <summary>The tool's own defaults for [schedule]: a watcher that syncs every 15 minutes, all day.</summary>
+    public static readonly ScheduleSettings ScheduleDefaults = new() { EveryMinutes = 15 };
+
+    /// <summary>[schedule] (a watcher): every_minutes is how often watch syncs; hours and days limit when.</summary>
+    public ScheduleSettings Schedule { get; init; } = ScheduleDefaults;
+
+    /// <summary>Old setting names still read: one log line each when watch starts.</summary>
+    public IReadOnlyList<string> Deprecations { get; init; } = [];
 
     public static string? Environment(string name) =>
         string.IsNullOrEmpty(name) || name.Contains('\0') ? null : System.Environment.GetEnvironmentVariable(name);
@@ -156,9 +171,38 @@ public sealed class Config
                 throw new PyValueError($"repo under [git] in {full} isn't a folder: {git.Repo}");
         }
 
+        // [schedule], the shared scheduling settings; watch_every_minutes is its old name, still read (not both).
+        var deprecations = new List<string>();
+        var oldEvery = raw.TryGetValue("watch_every_minutes", out var every) ? (long?)Int(every, "watch_every_minutes") : null;
+        ScheduleSettings schedule;
+        if (raw.TryGetValue("schedule", out var section))
+        {
+            if (oldEvery is not null)
+                throw new PyValueError($"{full}: watch_every_minutes and [schedule] are both set: keep every_minutes under [schedule].");
+            if (section is not TomlTable table)
+                throw new PyValueError($"{full}: schedule should be a [schedule] table.");
+            try
+            {
+                schedule = ScheduleSettings.Parse(table, ScheduleDefaults, TaskKind.Watcher, $"{full}: [schedule]");
+            }
+            catch (FormatException error)
+            {
+                throw new PyValueError(error.Message);
+            }
+        }
+        else if (oldEvery is { } minutes)
+        {
+            schedule = ScheduleDefaults with { EveryMinutes = (int)Math.Clamp(minutes, 1, 1440) };
+            deprecations.Add("watch_every_minutes is the old name: move it to [schedule] every_minutes");
+        }
+        else
+            schedule = ScheduleDefaults;
+
         var config = new Config
         {
             Path = full,
+            Schedule = schedule,
+            Deprecations = deprecations,
             Git = git,
             LoginHint = Text("login_hint"),
             Tenant = Text("tenant") ?? "organizations",
@@ -166,7 +210,7 @@ public sealed class Config
             StateFile = OptionalPath("state_file") ?? PyPath.Pure(System.IO.Path.Combine(local, $"state-{StateKey(full)}.json")),
             LogFile = OptionalPath("log_file") ?? PyPath.Pure(System.IO.Path.Combine(local, "teams-channel-sync.log")),
             AfterRun = raw.TryGetValue("after_run", out var hook) ? Strings(hook, "after_run") : [],
-            WatchEveryMinutes = Math.Max(1, raw.TryGetValue("watch_every_minutes", out var every) ? Int(every, "watch_every_minutes") : 15),
+            WatchEveryMinutes = Math.Max(1, schedule.EveryMinutes ?? 15),
         };
 
         if (raw.TryGetValue("source", out var sources))

@@ -47,9 +47,11 @@ public static class Watch
             return AlreadyRunning;
         }
         log($"watching {config.Sources.Count} source(s) every {config.WatchEveryMinutes} min (settings {config.Path})");
+        foreach (var note in config.Deprecations)
+            log($"settings: {note}");
         var stamp = host.ModifiedTime(config.Path);
         double nextSync = 0, beat = host.Now();
-        string? alerted = null;
+        string? alerted = null, idle = null;
         IGraph? graph = null;
         Config? graphFor = null;
         for (var tick = 0; host.Ticks is not { } limit || tick < limit; tick++)
@@ -70,9 +72,22 @@ public static class Watch
                         log($"settings changed but didn't load, so the old ones stay in use: {error.Message}");
                     }
                 }
-                if (host.Now() >= nextSync)
+                // [schedule] hours and days: outside them a due sync is skipped (logged once each time it starts).
+                string? why = null;
+                if (host.Now() >= nextSync
+                    && !config.Schedule.IsActive(DateTimeOffset.FromUnixTimeMilliseconds((long)(host.Now() * 1000)).LocalDateTime, out why))
                 {
                     nextSync = host.Now() + config.WatchEveryMinutes * 60;
+                    if (idle is null)
+                        log($"not syncing: {why}");
+                    idle = why;
+                }
+                else if (host.Now() >= nextSync)
+                {
+                    nextSync = host.Now() + config.WatchEveryMinutes * 60;
+                    if (idle is not null)
+                        log("inside the schedule again; syncing");
+                    idle = null;
                     if (!ReferenceEquals(graphFor, config))
                     {
                         graph = host.Graph(config);   // one client per settings, so its token is reused between syncs
